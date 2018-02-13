@@ -132,6 +132,7 @@ byte *Mod_DecompressVis (byte *in, qmodel_t *model)
 {
 	int		c;
 	byte	*out;
+	byte	*outend;
 	int		row;
 
 	row = (model->numleafs+7)>>3;
@@ -143,10 +144,8 @@ byte *Mod_DecompressVis (byte *in, qmodel_t *model)
 			Sys_Error ("Mod_DecompressVis: realloc() failed on %d bytes", mod_decompressed_capacity);
 	}
 	out = mod_decompressed;
+	outend = mod_decompressed + row;
 
-#if 0
-	memcpy (out, in, row);
-#else
 	if (!in)
 	{	// no vis info, so make all visible
 		while (row)
@@ -169,11 +168,18 @@ byte *Mod_DecompressVis (byte *in, qmodel_t *model)
 		in += 2;
 		while (c)
 		{
+			if (out == outend)
+			{
+				if(!model->viswarn) {
+					model->viswarn = true;
+					Con_Warning("Mod_DecompressVis: output overrun on model \"%s\"\n", model->name);
+				}
+				return mod_decompressed;
+			}
 			*out++ = 0;
 			c--;
 		}
 	} while (out - mod_decompressed < row);
-#endif
 
 	return mod_decompressed;
 }
@@ -765,6 +771,7 @@ Mod_LoadVisibility
 */
 void Mod_LoadVisibility (lump_t *l)
 {
+	loadmodel->viswarn = false;
 	if (!l->filelen)
 	{
 		loadmodel->visdata = NULL;
