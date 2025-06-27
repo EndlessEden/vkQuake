@@ -24,6 +24,15 @@
 #ifndef __NET_DEFS_H
 #define __NET_DEFS_H
 
+struct qsockaddr_hdr
+{
+#if defined(HAVE_SA_LEN)
+	unsigned char qsa_len;
+	unsigned char qsa_family;
+#else
+	short qsa_family;
+#endif /* BSD, sockaddr */
+};
 struct qsockaddr
 {
 #if defined(HAVE_SA_LEN)
@@ -31,27 +40,30 @@ struct qsockaddr
 	unsigned char qsa_family;
 #else
 	short qsa_family;
-#endif	/* BSD, sockaddr */
-	unsigned char qsa_data[14];
+#endif /* BSD, sockaddr */
+	unsigned char qsa_data[62];
 };
 
-#define NET_HEADERSIZE		(2 * sizeof(unsigned int))
-#define NET_DATAGRAMSIZE	(MAX_DATAGRAM + NET_HEADERSIZE)
+#define NET_HEADERSIZE	 (2 * sizeof (unsigned int))
+#define NET_DATAGRAMSIZE (MAX_DATAGRAM + NET_HEADERSIZE)
 
 // NetHeader flags
-#define NETFLAG_LENGTH_MASK	0x0000ffff
+#define NETFLAG_LENGTH_MASK 0x0000ffff
 #define NETFLAG_DATA		0x00010000
-#define NETFLAG_ACK		0x00020000
-#define NETFLAG_NAK		0x00040000
-#define NETFLAG_EOM		0x00080000
+#define NETFLAG_ACK			0x00020000
+#define NETFLAG_NAK			0x00040000
+#define NETFLAG_EOM			0x00080000
 #define NETFLAG_UNRELIABLE	0x00100000
-#define NETFLAG_CTL		0x80000000
+#define NETFLAG_CTL			0x80000000
 
 #if (NETFLAG_LENGTH_MASK & NET_MAXMESSAGE) != NET_MAXMESSAGE
 #error "NET_MAXMESSAGE must fit within NETFLAG_LENGTH_MASK"
 #endif
 
-#define NET_PROTOCOL_VERSION	3
+#define NET_LOOPBACKBUFFERS	   5
+#define NET_LOOPBACKHEADERSIZE 4
+
+#define NET_PROTOCOL_VERSION 3
 
 /**
 
@@ -116,145 +128,155 @@ CCREP_RULE_INFO
 
 **/
 
-#define CCREQ_CONNECT		0x01
-#define CCREQ_SERVER_INFO	0x02
-#define CCREQ_PLAYER_INFO	0x03
-#define CCREQ_RULE_INFO		0x04
+#define CCREQ_CONNECT	  0x01
+#define CCREQ_SERVER_INFO 0x02
+#define CCREQ_PLAYER_INFO 0x03
+#define CCREQ_RULE_INFO	  0x04
+#define CCREQ_RCON		  0x05
 
-#define CCREP_ACCEPT		0x81
-#define CCREP_REJECT		0x82
-#define CCREP_SERVER_INFO	0x83
-#define CCREP_PLAYER_INFO	0x84
-#define CCREP_RULE_INFO		0x85
+#define CCREP_ACCEPT	  0x81
+#define CCREP_REJECT	  0x82
+#define CCREP_SERVER_INFO 0x83
+#define CCREP_PLAYER_INFO 0x84
+#define CCREP_RULE_INFO	  0x85
+#define CCREP_RCON		  0x86
 
 typedef struct qsocket_s
 {
-	struct qsocket_s	*next;
-	double		connecttime;
-	double		lastMessageTime;
-	double		lastSendTime;
+	struct qsocket_s *next;
+	double			  connecttime;
+	double			  lastMessageTime;
+	double			  lastSendTime;
 
-	qboolean	disconnected;
-	qboolean	canSend;
-	qboolean	sendNext;
+	qboolean isvirtual; // qsocket is emulated by the network layer (closing will not close any system sockets).
+	qboolean disconnected;
+	qboolean canSend;
+	qboolean sendNext;
 
-	int		driver;
-	int		landriver;
-	sys_socket_t	socket;
+	int			 driver;
+	int			 landriver;
+	sys_socket_t socket;
 	void		*driverdata;
 
-	unsigned int	ackSequence;
-	unsigned int	sendSequence;
-	unsigned int	unreliableSendSequence;
-	int		sendMessageLength;
-	byte		sendMessage [NET_MAXMESSAGE];
+	unsigned int ackSequence;
+	unsigned int sendSequence;
+	unsigned int unreliableSendSequence;
+	int			 sendMessageLength;
+	byte		 sendMessage[NET_MAXMESSAGE];
 
-	unsigned int	receiveSequence;
-	unsigned int	unreliableReceiveSequence;
-	int		receiveMessageLength;
-	byte		receiveMessage [NET_MAXMESSAGE];
+	unsigned int receiveSequence;
+	unsigned int unreliableReceiveSequence;
+	int			 receiveMessageLength;
+	byte		 receiveMessage[NET_MAXMESSAGE * NET_LOOPBACKBUFFERS + NET_LOOPBACKHEADERSIZE];
 
-	struct qsockaddr	addr;
-	char		address[NET_NAMELEN];
+	struct qsockaddr addr;
+	char			 trueaddress[NET_NAMELEN];	 // lazy address string
+	char			 maskedaddress[NET_NAMELEN]; // addresses for this player that may be displayed publically
 
+	qboolean proquake_angle_hack;  // 1 if we're trying, 2 if the server acked.
+	int		 max_datagram;		   // 32000 for local, 1442 for 666, 1024 for 15. this is for reliable fragments.
+	int		 pending_max_datagram; // don't change the mtu if we're resending, as that would confuse the peer.
 } qsocket_t;
 
-extern qsocket_t	*net_activeSockets;
-extern qsocket_t	*net_freeSockets;
-extern int		net_numsockets;
+extern qsocket_t *net_activeSockets;
+extern qsocket_t *net_freeSockets;
+extern int		  net_numsockets;
 
 typedef struct
 {
 	const char	*name;
-	qboolean	initialized;
-	sys_socket_t	controlSock;
-	sys_socket_t	(*Init) (void);
-	void		(*Shutdown) (void);
-	void		(*Listen) (qboolean state);
-	sys_socket_t	(*Open_Socket) (int port);
-	int		(*Close_Socket) (sys_socket_t socketid);
-	int		(*Connect) (sys_socket_t socketid, struct qsockaddr *addr);
-	sys_socket_t	(*CheckNewConnections) (void);
-	int		(*Read) (sys_socket_t socketid, byte *buf, int len, struct qsockaddr *addr);
-	int		(*Write) (sys_socket_t socketid, byte *buf, int len, struct qsockaddr *addr);
-	int		(*Broadcast) (sys_socket_t socketid, byte *buf, int len);
-	const char *	(*AddrToString) (struct qsockaddr *addr);
-	int		(*StringToAddr) (const char *string, struct qsockaddr *addr);
-	int		(*GetSocketAddr) (sys_socket_t socketid, struct qsockaddr *addr);
-	int		(*GetNameFromAddr) (struct qsockaddr *addr, char *name);
-	int		(*GetAddrFromName) (const char *name, struct qsockaddr *addr);
-	int		(*AddrCompare) (struct qsockaddr *addr1, struct qsockaddr *addr2);
-	int		(*GetSocketPort) (struct qsockaddr *addr);
-	int		(*SetSocketPort) (struct qsockaddr *addr, int port);
+	qboolean	 initialized;
+	sys_socket_t controlSock;
+	sys_socket_t (*Init) (void);
+	void (*Shutdown) (void);
+	sys_socket_t (*Listen) (qboolean state);
+	int (*QueryAddresses) (qhostaddr_t *addresses, int maxaddresses);
+	sys_socket_t (*Open_Socket) (int port);
+	int (*Close_Socket) (sys_socket_t socketid);
+	int (*Connect) (sys_socket_t socketid, struct qsockaddr *addr);
+	sys_socket_t (*CheckNewConnections) (void);
+	int (*Read) (sys_socket_t socketid, byte *buf, int len, struct qsockaddr *addr);
+	int (*Write) (sys_socket_t socketid, byte *buf, int len, struct qsockaddr *addr);
+	int (*Broadcast) (sys_socket_t socketid, byte *buf, int len);
+	const char *(*AddrToString) (struct qsockaddr *addr, qboolean masked);
+	int (*StringToAddr) (const char *string, struct qsockaddr *addr);
+	int (*GetSocketAddr) (sys_socket_t socketid, struct qsockaddr *addr);
+	int (*GetNameFromAddr) (struct qsockaddr *addr, char *name);
+	int (*GetAddrFromName) (const char *name, struct qsockaddr *addr);
+	int (*AddrCompare) (struct qsockaddr *addr1, struct qsockaddr *addr2);
+	int (*GetSocketPort) (struct qsockaddr *addr);
+	int (*SetSocketPort) (struct qsockaddr *addr, int port);
+
+	sys_socket_t listeningSock;
 } net_landriver_t;
 
-#define	MAX_NET_DRIVERS		8
-extern net_landriver_t	net_landrivers[];
-extern const int	net_numlandrivers;
+#define MAX_NET_DRIVERS 8
+extern net_landriver_t net_landrivers[];
+extern const int	   net_numlandrivers;
 
 typedef struct
 {
-	const char	*name;
+	const char *name;
 	qboolean	initialized;
-	int		(*Init) (void);
-	void		(*Listen) (qboolean state);
-	void		(*SearchForHosts) (qboolean xmit);
-	qsocket_t	*(*Connect) (const char *host);
-	qsocket_t	*(*CheckNewConnections) (void);
-	int		(*QGetMessage) (qsocket_t *sock);
-	int		(*QSendMessage) (qsocket_t *sock, sizebuf_t *data);
-	int		(*SendUnreliableMessage) (qsocket_t *sock, sizebuf_t *data);
-	qboolean	(*CanSendMessage) (qsocket_t *sock);
-	qboolean	(*CanSendUnreliableMessage) (qsocket_t *sock);
-	void		(*Close) (qsocket_t *sock);
-	void		(*Shutdown) (void);
+	int (*Init) (void);
+	void (*Listen) (qboolean state);
+	int (*QueryAddresses) (qhostaddr_t *addresses, int maxaddresses);
+	qboolean (*SearchForHosts) (qboolean xmit);
+	qsocket_t *(*Connect) (const char *host);
+	qsocket_t *(*CheckNewConnections) (void);
+	qsocket_t *(*QGetAnyMessage) (void);
+	int (*QGetMessage) (qsocket_t *sock);
+	int (*QSendMessage) (qsocket_t *sock, sizebuf_t *data);
+	int (*SendUnreliableMessage) (qsocket_t *sock, sizebuf_t *data);
+	qboolean (*CanSendMessage) (qsocket_t *sock);
+	qboolean (*CanSendUnreliableMessage) (qsocket_t *sock);
+	void (*Close) (qsocket_t *sock);
+	void (*Shutdown) (void);
 } net_driver_t;
 
-extern net_driver_t	net_drivers[];
+extern net_driver_t net_drivers[];
 extern const int	net_numdrivers;
 
 /* Loop driver must always be registered the first */
-#define IS_LOOP_DRIVER(p)	((p) == 0)
+#define IS_LOOP_DRIVER(p) ((p) == 0)
 
-extern int		net_driverlevel;
+extern int net_driverlevel;
 
-extern int		messagesSent;
-extern int		messagesReceived;
-extern int		unreliableMessagesSent;
-extern int		unreliableMessagesReceived;
+extern int messagesSent;
+extern int messagesReceived;
+extern int unreliableMessagesSent;
+extern int unreliableMessagesReceived;
 
 qsocket_t *NET_NewQSocket (void);
-void NET_FreeQSocket(qsocket_t *);
-double SetNetTime(void);
+void	   NET_FreeQSocket (qsocket_t *);
+double	   SetNetTime (void);
 
-
-#define HOSTCACHESIZE	8
+#define HOSTCACHESIZE 128 // fixme: make dynamic.
 
 typedef struct
 {
-	char	name[16];
-	char	map[16];
-	char	cname[32];
-	int		users;
-	int		maxusers;
-	int		driver;
-	int		ldriver;
+	char			 name[64];
+	char			 map[16];
+	char			 gamedir[16];
+	char			 cname[NET_NAMELEN];
+	int				 users;
+	int				 maxusers;
+	int				 driver;
+	int				 ldriver;
 	struct qsockaddr addr;
 } hostcache_t;
 
-extern int hostCacheCount;
+extern size_t	   hostCacheCount;
 extern hostcache_t hostcache[HOSTCACHESIZE];
-
 
 typedef struct _PollProcedure
 {
-	struct _PollProcedure	*next;
-	double				nextTime;
-	void				(*procedure)(void *);
-	void				*arg;
+	struct _PollProcedure *next;
+	double				   nextTime;
+	void (*procedure) (void *);
+	void *arg;
 } PollProcedure;
 
-void SchedulePollProcedure(PollProcedure *pp, double timeOffset);
+void SchedulePollProcedure (PollProcedure *pp, double timeOffset);
 
-#endif	/* __NET_DEFS_H */
-
+#endif /* __NET_DEFS_H */

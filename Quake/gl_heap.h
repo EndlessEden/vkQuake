@@ -21,31 +21,35 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #ifndef __HEAP__
 #define __HEAP__
 
-typedef struct glheapnode_s
+typedef struct glheap_s			  glheap_t;
+typedef struct glheapallocation_s glheapallocation_t;
+
+typedef struct glheapstats_s
 {
-	VkDeviceSize offset;
-	VkDeviceSize size;
-	struct glheapnode_s * prev;
-	struct glheapnode_s * next;
-	qboolean free;
-} glheapnode_t;
+	uint32_t num_segments;
+	uint32_t num_allocations;
+	uint32_t num_small_allocations;
+	uint32_t num_block_allocations;
+	uint32_t num_dedicated_allocations;
+	uint32_t num_blocks_used;
+	uint32_t num_blocks_free;
+	uint32_t num_pages_allocated;
+	uint32_t num_pages_free;
+	uint64_t num_bytes_allocated;
+	uint64_t num_bytes_free;
+	uint64_t num_bytes_wasted;
+} glheapstats_t;
 
-typedef struct glheap_s
-{
-	VkDeviceMemory	memory;
-	glheapnode_t * head;
-} glheap_t;
+glheap_t *GL_HeapCreate (VkDeviceSize segment_size, uint32_t page_size, uint32_t memory_type_index, vulkan_memory_type_t memory_type, const char *heap_name);
+void	  GL_HeapDestroy (glheap_t *heap, atomic_uint32_t *num_allocations);
+glheapallocation_t *GL_HeapAllocate (glheap_t *heap, VkDeviceSize size, VkDeviceSize alignment, atomic_uint32_t *num_allocations);
+void				GL_HeapFree (glheap_t *heap, glheapallocation_t *allocation, atomic_uint32_t *num_allocations);
+VkDeviceMemory		GL_HeapGetAllocationMemory (glheapallocation_t *allocation);
+VkDeviceSize		GL_HeapGetAllocationOffset (glheapallocation_t *allocation);
+glheapstats_t	   *GL_HeapGetStats (glheap_t *heap);
 
-glheap_t * GL_CreateHeap(VkDeviceSize size, uint32_t memory_type_index, const char * name);
-void GL_DestroyHeap(glheap_t * heap);
-
-glheapnode_t * GL_HeapAllocate(glheap_t * heap, VkDeviceSize size, VkDeviceSize alignment, VkDeviceSize * aligned_offset);
-void GL_HeapFree(glheap_t * heap, glheapnode_t * node);
-
-qboolean GL_IsHeapEmpty(glheap_t * heap);
-
-VkDeviceSize GL_AllocateFromHeaps(int num_heaps, glheap_t ** heaps, VkDeviceSize heap_size, uint32_t memory_type_index,
-	VkDeviceSize size, VkDeviceSize alignment, glheap_t ** heap, glheapnode_t ** heap_node, int * num_allocations, const char * heap_name);
-void GL_FreeFromHeaps(int num_heaps, glheap_t ** heaps, glheap_t * heap, glheapnode_t * heap_node, int * num_allocations);
+#ifdef _DEBUG
+void GL_HeapTest_f (void);
+#endif
 
 #endif

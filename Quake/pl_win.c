@@ -24,10 +24,8 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "quakedef.h"
 #include <windows.h>
 #if defined(SDL_FRAMEWORK) || defined(NO_SDL_CONFIG)
-#include <SDL2/SDL.h>
 #include <SDL2/SDL_syswm.h>
 #else
-#include "SDL.h"
 #include "SDL_syswm.h"
 #endif
 
@@ -35,56 +33,56 @@ static HICON icon;
 
 void PL_SetWindowIcon (void)
 {
-	HINSTANCE handle;
+	HINSTANCE	  handle;
 	SDL_SysWMinfo wminfo;
-	HWND hwnd;
+	HWND		  hwnd;
 
-	handle = GetModuleHandle(NULL);
-	icon = LoadIcon(handle, "icon");
+	handle = GetModuleHandle (NULL);
+	icon = LoadIcon (handle, "icon");
 
 	if (!icon)
-		return;	/* no icon in the exe */
+		return; /* no icon in the exe */
 
-	SDL_VERSION(&wminfo.version);
+	SDL_VERSION (&wminfo.version);
 
-	if (SDL_GetWindowWMInfo((SDL_Window*) VID_GetWindow(), &wminfo) != SDL_TRUE)
-		return;	/* wrong SDL version */
+	if (SDL_GetWindowWMInfo ((SDL_Window *)VID_GetWindow (), &wminfo) != SDL_TRUE)
+		return; /* wrong SDL version */
 
 	hwnd = wminfo.info.win.window;
 #ifdef _WIN64
-	SetClassLongPtr(hwnd, GCLP_HICON, (LONG_PTR) icon);
+	SetClassLongPtr (hwnd, GCLP_HICON, (LONG_PTR)icon);
 #else
-	SetClassLong(hwnd, GCL_HICON, (LONG) icon);
+	SetClassLong (hwnd, GCL_HICON, (LONG)icon);
 #endif
 }
 
 void PL_VID_Shutdown (void)
 {
-	DestroyIcon(icon);
+	DestroyIcon (icon);
 }
 
-#define MAX_CLIPBOARDTXT	MAXCMDLINE	/* 256 */
+#define MAX_CLIPBOARDTXT MAXCMDLINE /* 256 */
 char *PL_GetClipboardData (void)
 {
 	char *data = NULL;
 	char *cliptext;
 
-	if (OpenClipboard(NULL) != 0)
+	if (OpenClipboard (NULL) != 0)
 	{
 		HANDLE hClipboardData;
 
-		if ((hClipboardData = GetClipboardData(CF_TEXT)) != NULL)
+		if ((hClipboardData = GetClipboardData (CF_TEXT)) != NULL)
 		{
-			cliptext = (char *) GlobalLock(hClipboardData);
+			cliptext = (char *)GlobalLock (hClipboardData);
 			if (cliptext != NULL)
 			{
-				size_t size = GlobalSize(hClipboardData) + 1;
-			/* this is intended for simple small text copies
-			 * such as an ip address, etc:  do chop the size
-			 * here, otherwise we may experience Z_Malloc()
-			 * failures and all other not-oh-so-fun stuff. */
-				size = q_min(MAX_CLIPBOARDTXT, size);
-				data = (char *) Z_Malloc(size);
+				size_t size = GlobalSize (hClipboardData) + 1;
+				/* this is intended for simple small text copies
+				 * such as an ip address, etc:  do chop the size
+				 * here, otherwise we may experience Mem_Alloc()
+				 * failures and all other not-oh-so-fun stuff. */
+				size = q_min (MAX_CLIPBOARDTXT, size);
+				data = (char *)Mem_Alloc (size);
 				q_strlcpy (data, cliptext, size);
 				GlobalUnlock (hClipboardData);
 			}
@@ -94,9 +92,7 @@ char *PL_GetClipboardData (void)
 	return data;
 }
 
-void PL_ErrorDialog(const char *errorMsg)
+void PL_ErrorDialog (const char *errorMsg)
 {
-	MessageBox (NULL, errorMsg, "Quake Error",
-			MB_OK | MB_SETFOREGROUND | MB_ICONSTOP);
+	MessageBox (NULL, errorMsg, "Quake Error", MB_OK | MB_SETFOREGROUND | MB_ICONSTOP);
 }
-
